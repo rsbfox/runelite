@@ -135,6 +135,18 @@ public interface ChatChannelConfig extends Config
 	}
 
 	@ConfigItem(
+			keyName = "warnUnrankedF2P",
+			name = "Warn unranked F2P",
+			description = "Adds a temporary message notifying when an unranked F2P member joins.",
+			position = 6,
+			section = friendsChatSection
+	)
+	default boolean showFriendsChatWarnUnrankedF2P()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "privateMessageIcons",
 		name = "Private message icons",
 		description = "Add rank icons to private messages received from members.",

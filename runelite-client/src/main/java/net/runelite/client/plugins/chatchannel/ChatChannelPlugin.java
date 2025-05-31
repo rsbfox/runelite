@@ -80,6 +80,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ChatIconManager;
+import net.runelite.client.game.WorldService;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -88,6 +89,8 @@ import static net.runelite.client.ui.JagexColors.CHAT_FC_NAME_TRANSPARENT_BACKGR
 import static net.runelite.client.ui.JagexColors.CHAT_FC_TEXT_OPAQUE_BACKGROUND;
 import static net.runelite.client.ui.JagexColors.CHAT_FC_TEXT_TRANSPARENT_BACKGROUND;
 import net.runelite.client.util.Text;
+import net.runelite.http.api.worlds.World;
+import net.runelite.http.api.worlds.WorldType;
 
 @PluginDescriptor(
 	name = "Chat Channels",
@@ -118,6 +121,9 @@ public class ChatChannelPlugin extends Plugin
 
 	@Inject
 	private ChatColorConfig chatColorConfig;
+
+	@Inject
+	private WorldService worldService;
 
 	private List<String> chats;
 	/**
@@ -185,6 +191,18 @@ public class ChatChannelPlugin extends Plugin
 			return;
 		}
 
+		if (config.showFriendsChatWarnUnrankedF2P() && member.getRank().equals(FriendsChatRank.UNRANKED))
+		{
+			World world = worldService.getWorlds().findWorld(member.getWorld());
+			if (world != null) {
+				if (!world.getTypes().contains(WorldType.MEMBERS))
+				{
+					queueJoin(member, MemberActivity.ChatType.FRIENDS_CHAT, true);
+					return;
+				}
+			}
+		}
+
 		if (!config.showFriendsChatJoinLeave() ||
 			member.getRank().getValue() < config.joinLeaveRank().getValue())
 		{
@@ -192,7 +210,7 @@ public class ChatChannelPlugin extends Plugin
 		}
 
 		// attempt to filter out world hopping joins
-		queueJoin(member, MemberActivity.ChatType.FRIENDS_CHAT);
+		queueJoin(member, MemberActivity.ChatType.FRIENDS_CHAT, false);
 	}
 
 	@Subscribe
@@ -215,7 +233,7 @@ public class ChatChannelPlugin extends Plugin
 		MemberActivity.ChatType chatType = clanChannelToChatType(clanMemberJoined.getClanChannel());
 		if (chatType != null && clanChannelJoinLeaveEnabled(chatType))
 		{
-			queueJoin(clanMemberJoined.getClanMember(), chatType);
+			queueJoin(clanMemberJoined.getClanMember(), chatType, false);
 		}
 	}
 
@@ -249,7 +267,7 @@ public class ChatChannelPlugin extends Plugin
 		}
 	}
 
-	private void queueJoin(ChatPlayer member, MemberActivity.ChatType chatType)
+	private void queueJoin(ChatPlayer member, MemberActivity.ChatType chatType, boolean warn)
 	{
 		for (ListIterator<MemberActivity> iter = activityBuffer.listIterator(); iter.hasNext(); )
 		{
@@ -262,7 +280,7 @@ public class ChatChannelPlugin extends Plugin
 			}
 		}
 
-		MemberActivity activity = new MemberActivity(ActivityType.JOINED, chatType,
+		MemberActivity activity = new MemberActivity(warn ? ActivityType.WARN : ActivityType.JOINED, chatType,
 			member, client.getTickCount());
 		activityBuffer.add(activity);
 	}
@@ -399,7 +417,7 @@ public class ChatChannelPlugin extends Plugin
 			return;
 		}
 
-		final String activityMessage = activityType == ActivityType.JOINED ? " has joined." : " has left.";
+		final String activityMessage = activityType == ActivityType.LEFT ? " has left." : " has joined.";
 		final FriendsChatRank rank = member.getRank();
 		final Color textColor, channelColor;
 		int rankIcon = -1;
@@ -433,6 +451,10 @@ public class ChatChannelPlugin extends Plugin
 		message
 			.append("] ")
 			.append(textColor, member.getName() + activityMessage);
+		if (activityType == ActivityType.WARN)
+		{
+			message.append(Color.RED, " (Unranked F2P)");
+		}
 
 		final String messageString = message.build();
 		final MessageNode line = client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION, "", messageString, "");
